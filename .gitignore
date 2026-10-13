@@ -4,3 +4,4 @@ feature_usage_1.csv
 feature_usage.csv
 logins_batch_1.json
 test.ipynb
+__pycache__/
