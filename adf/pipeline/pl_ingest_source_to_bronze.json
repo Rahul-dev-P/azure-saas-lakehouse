@@ -1,0 +1,605 @@
+{
+	"name": "pl_ingest_source_to_bronze",
+	"properties": {
+		"activities": [
+			{
+				"name": "sp_log_start",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[etl_control].[sp_start_pipeline_run]",
+					"storedProcedureParameters": {
+						"new_watermark": {
+							"value": {
+								"value": "@utcNow()",
+								"type": "Expression"
+							},
+							"type": "DateTime"
+						},
+						"run_id": {
+							"value": {
+								"value": "@pipeline().RunId",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"source_id": {
+							"value": {
+								"value": "@pipeline().parameters.p_source_id",
+								"type": "Expression"
+							},
+							"type": "Int32"
+						}
+					}
+				},
+				"linkedServiceName": {
+					"referenceName": "ls_azure_sql_oltp",
+					"type": "LinkedServiceReference"
+				}
+			},
+			{
+				"name": "switch_by_source_type",
+				"type": "Switch",
+				"dependsOn": [
+					{
+						"activity": "sp_log_start",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"on": {
+						"value": "@pipeline().parameters.p_source_type",
+						"type": "Expression"
+					},
+					"cases": [
+						{
+							"value": "table",
+							"activities": [
+								{
+									"name": "copy_sql_to_bronze",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzureSqlSource",
+											"sqlReaderQuery": {
+												"value": "@if(\n  equals(pipeline().parameters.p_load_type, 'full'),\n  concat(\n    'SELECT *, SYSUTCDATETIME() AS _ingested_at, ''', \n    pipeline().parameters.p_source_system, \n    ''' AS _source_system FROM [', \n    pipeline().parameters.p_source_schema_or_path, \n    '].[' , \n    pipeline().parameters.p_source_object_name, \n    ']'\n  ),\n  concat(\n    'SELECT *, SYSUTCDATETIME() AS _ingested_at, ''', \n    pipeline().parameters.p_source_system, \n    ''' AS _source_system FROM [', \n    pipeline().parameters.p_source_schema_or_path, \n    '].[' , \n    pipeline().parameters.p_source_object_name, \n    '] WHERE [', \n    pipeline().parameters.p_watermark_col, \n    '] > ''', \n    pipeline().parameters.p_last_watermark, \n    ''' AND [', \n    pipeline().parameters.p_watermark_col, \n    '] <= SYSUTCDATETIME()'\n  )\n)",
+												"type": "Expression"
+											},
+											"queryTimeout": "02:00:00",
+											"partitionOption": "None"
+										},
+										"sink": {
+											"type": "ParquetSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "ParquetWriteSettings"
+											}
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "ds_sql_generic",
+											"type": "DatasetReference",
+											"parameters": {
+												"p_schema_name": {
+													"value": "@pipeline().parameters.p_source_schema_or_path",
+													"type": "Expression"
+												},
+												"p_table_name": {
+													"value": "@pipeline().parameters.p_source_object_name",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "ds_adls_generic_parquet",
+											"type": "DatasetReference",
+											"parameters": {
+												"p_container": "bronze",
+												"p_folder_path": {
+													"value": "@concat(pipeline().parameters.p_target_subpath, '/ingest_year=', formatDateTime(utcNow(), 'yyyy'), '/ingest_month=', formatDateTime(utcNow(), 'MM'))",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "sp_log_complete_sql",
+									"type": "SqlServerStoredProcedure",
+									"dependsOn": [
+										{
+											"activity": "copy_sql_to_bronze",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"storedProcedureName": "[etl_control].[sp_complete_pipeline_run]",
+										"storedProcedureParameters": {
+											"rows_written": {
+												"value": {
+													"value": "@activity('copy_sql_to_bronze').output.rowsRead",
+													"type": "Expression"
+												},
+												"type": "Int32"
+											},
+											"run_id": {
+												"value": {
+													"value": "@pipeline().RunId",
+													"type": "Expression"
+												},
+												"type": "String"
+											},
+											"source_id": {
+												"value": {
+													"value": "@pipeline().parameters.p_source_id",
+													"type": "Expression"
+												},
+												"type": "Int32"
+											}
+										}
+									},
+									"linkedServiceName": {
+										"referenceName": "ls_azure_sql_oltp",
+										"type": "LinkedServiceReference"
+									}
+								}
+							]
+						},
+						{
+							"value": "file",
+							"activities": [
+								{
+									"name": "copy_csv_to_bronze",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "DelimitedTextSource",
+											"additionalColumns": [
+												{
+													"name": "_ingested_at",
+													"value": {
+														"value": "@utcNow()",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "_source_file",
+													"value": "$$FILEPATH"
+												}
+											],
+											"storeSettings": {
+												"type": "AzureBlobFSReadSettings",
+												"recursive": true,
+												"modifiedDatetimeStart": {
+													"value": "@if(equals(pipeline().parameters.p_load_type, 'full'), null, pipeline().parameters.p_last_watermark)",
+													"type": "Expression"
+												},
+												"modifiedDatetimeEnd": {
+													"value": "@utcNow()",
+													"type": "Expression"
+												},
+												"wildcardFolderPath": {
+													"value": "@pipeline().parameters.p_source_schema_or_path",
+													"type": "Expression"
+												},
+												"wildcardFileName": {
+													"value": "@pipeline().parameters.p_source_object_name",
+													"type": "Expression"
+												},
+												"enablePartitionDiscovery": false
+											},
+											"formatSettings": {
+												"type": "DelimitedTextReadSettings"
+											}
+										},
+										"sink": {
+											"type": "ParquetSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "ParquetWriteSettings"
+											}
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "ds_adls_generic_csv",
+											"type": "DatasetReference",
+											"parameters": {
+												"p_container": "landing",
+												"p_folder_path": {
+													"value": "@pipeline().parameters.p_source_schema_or_path",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "ds_adls_generic_parquet",
+											"type": "DatasetReference",
+											"parameters": {
+												"p_container": "bronze",
+												"p_folder_path": {
+													"value": "@concat(pipeline().parameters.p_target_subpath, '/ingest_year=', formatDateTime(utcNow(), 'yyyy'), '/ingest_month=', formatDateTime(utcNow(), 'MM'))",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "sp_log_complete_csv",
+									"type": "SqlServerStoredProcedure",
+									"dependsOn": [
+										{
+											"activity": "copy_csv_to_bronze",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"storedProcedureName": "[etl_control].[sp_complete_pipeline_run]",
+										"storedProcedureParameters": {
+											"rows_written": {
+												"value": {
+													"value": "@activity('copy_csv_to_bronze').output.rowsRead",
+													"type": "Expression"
+												},
+												"type": "Int32"
+											},
+											"run_id": {
+												"value": {
+													"value": "@pipeline().RunId",
+													"type": "Expression"
+												},
+												"type": "String"
+											},
+											"source_id": {
+												"value": {
+													"value": "@pipeline().parameters.p_source_id",
+													"type": "Expression"
+												},
+												"type": "Int32"
+											}
+										}
+									},
+									"linkedServiceName": {
+										"referenceName": "ls_azure_sql_oltp",
+										"type": "LinkedServiceReference"
+									}
+								}
+							]
+						},
+						{
+							"value": "json",
+							"activities": [
+								{
+									"name": "copy_json_to_bronze",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"additionalColumns": [
+												{
+													"name": "_ingested_at",
+													"value": {
+														"value": "@utcNow()",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "_source_file",
+													"value": "$$FILENAME"
+												}
+											],
+											"storeSettings": {
+												"type": "AzureBlobFSReadSettings",
+												"recursive": true,
+												"modifiedDatetimeStart": {
+													"value": "@if(equals(pipeline().parameters.p_load_type, 'full'), null, pipeline().parameters.p_last_watermark)",
+													"type": "Expression"
+												},
+												"modifiedDatetimeEnd": {
+													"value": "@utcNow()",
+													"type": "Expression"
+												},
+												"wildcardFolderPath": {
+													"value": "@pipeline().parameters.p_source_schema_or_path",
+													"type": "Expression"
+												},
+												"wildcardFileName": {
+													"value": "@pipeline().parameters.p_source_object_name",
+													"type": "Expression"
+												},
+												"enablePartitionDiscovery": false
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "JsonSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "JsonWriteSettings"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "ds_adls_generic_json",
+											"type": "DatasetReference",
+											"parameters": {
+												"p_container": "landing",
+												"p_folder_path": {
+													"value": "@pipeline().parameters.p_source_schema_or_path",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "ds_adls_generic_json",
+											"type": "DatasetReference",
+											"parameters": {
+												"p_container": "bronze",
+												"p_folder_path": {
+													"value": "@concat(pipeline().parameters.p_target_subpath, '/ingest_year=', formatDateTime(utcnow(), 'yyyy'), '/ingest_month=', formatDateTime(utcnow(), 'MM'))",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "sp_log_complete_json",
+									"type": "SqlServerStoredProcedure",
+									"dependsOn": [
+										{
+											"activity": "copy_json_to_bronze",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"storedProcedureName": "[etl_control].[sp_complete_pipeline_run]",
+										"storedProcedureParameters": {
+											"rows_written": {
+												"value": {
+													"value": "@activity('copy_json_to_bronze').output.filesWritten",
+													"type": "Expression"
+												},
+												"type": "Int32"
+											},
+											"run_id": {
+												"value": {
+													"value": "@pipeline().RunId",
+													"type": "Expression"
+												},
+												"type": "String"
+											},
+											"source_id": {
+												"value": {
+													"value": "@pipeline().parameters.p_source_id",
+													"type": "Expression"
+												},
+												"type": "Int32"
+											}
+										}
+									},
+									"linkedServiceName": {
+										"referenceName": "ls_azure_sql_oltp",
+										"type": "LinkedServiceReference"
+									}
+								}
+							]
+						}
+					]
+				}
+			},
+			{
+				"name": "sp_log_failure",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [
+					{
+						"activity": "switch_by_source_type",
+						"dependencyConditions": [
+							"Failed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[etl_control].[sp_fail_pipeline_run]",
+					"storedProcedureParameters": {
+						"error_message": {
+							"value": {
+								"value": "@activity('switch_by_source_type').error.message",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"run_id": {
+							"value": {
+								"value": "@pipeline().RunId",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"source_id": {
+							"value": {
+								"value": "@pipeline().parameters.p_source_id",
+								"type": "Expression"
+							},
+							"type": "Int32"
+						}
+					}
+				},
+				"linkedServiceName": {
+					"referenceName": "ls_azure_sql_oltp",
+					"type": "LinkedServiceReference"
+				}
+			},
+			{
+				"name": "Fail1",
+				"type": "Fail",
+				"dependsOn": [
+					{
+						"activity": "sp_log_failure",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"message": {
+						"value": "@activity('switch_by_source_type').error.message",
+						"type": "Expression"
+					},
+					"errorCode": "500"
+				}
+			}
+		],
+		"parameters": {
+			"p_source_id": {
+				"type": "int"
+			},
+			"p_source_system": {
+				"type": "string"
+			},
+			"p_entity_name": {
+				"type": "string"
+			},
+			"p_source_type": {
+				"type": "string"
+			},
+			"p_source_schema_or_path": {
+				"type": "string"
+			},
+			"p_source_object_name": {
+				"type": "string"
+			},
+			"p_watermark_col": {
+				"type": "string",
+				"defaultValue": "updated_at"
+			},
+			"p_last_watermark": {
+				"type": "string",
+				"defaultValue": "1970-01-01T00:00:00Z"
+			},
+			"p_target_subpath": {
+				"type": "string"
+			},
+			"p_load_type": {
+				"type": "string",
+				"defaultValue": "incremental"
+			}
+		},
+		"annotations": [],
+		"lastPublishTime": "2026-10-13T14:25:23Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

@@ -1,0 +1,196 @@
+{
+	"name": "pl_master_orchestrator",
+	"properties": {
+		"activities": [
+			{
+				"name": "lookup_get_active_configs",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": "SELECT \n    c.source_id,\n    c.source_system,\n    c.entity_name,\n    c.source_type,\n    c.source_schema_or_path,\n    c.source_object_name,\n    c.watermark_column,\n    c.target_container,\n    c.target_subpath,\n    c.silver_table_name,\n    c.gold_table_name,\n    c.load_type,\n    c.execution_order,\n    ISNULL(CONVERT(VARCHAR(23), w.last_processed_watermark, 126), '1970-01-01T00:00:00') AS last_processed_watermark\nFROM etl_control.pipeline_config c\nJOIN etl_control.watermark_control w ON c.source_id = w.source_id\nWHERE c.is_active = 1\nORDER BY c.execution_order ASC, c.source_id ASC;",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "ds_sql_generic",
+						"type": "DatasetReference",
+						"parameters": {
+							"p_schema_name": {
+								"value": "@string('')",
+								"type": "Expression"
+							},
+							"p_table_name": {
+								"value": "@string('')",
+								"type": "Expression"
+							}
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "forEach_iterate_entities",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "lookup_get_active_configs",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('lookup_get_active_configs').output.value",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "exec_child_ingestion",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"policy": {
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "pl_ingest_source_to_bronze",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"p_source_id": {
+										"value": "@item().source_id",
+										"type": "Expression"
+									},
+									"p_source_system": {
+										"value": "@item().source_system",
+										"type": "Expression"
+									},
+									"p_entity_name": {
+										"value": "@item().entity_name",
+										"type": "Expression"
+									},
+									"p_source_type": {
+										"value": "@item().source_type",
+										"type": "Expression"
+									},
+									"p_source_schema_or_path": {
+										"value": "@item().source_schema_or_path",
+										"type": "Expression"
+									},
+									"p_source_object_name": {
+										"value": "@item().source_object_name",
+										"type": "Expression"
+									},
+									"p_watermark_col": {
+										"value": "@item().watermark_column",
+										"type": "Expression"
+									},
+									"p_last_watermark": {
+										"value": "@item().last_processed_watermark",
+										"type": "Expression"
+									},
+									"p_target_subpath": {
+										"value": "@item().target_subpath",
+										"type": "Expression"
+									},
+									"p_load_type": {
+										"value": "@item().load_type",
+										"type": "Expression"
+									}
+								}
+							}
+						},
+						{
+							"name": "nb_transform_silver",
+							"type": "DatabricksNotebook",
+							"dependsOn": [
+								{
+									"activity": "exec_child_ingestion",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"notebookPath": "/Users/panchalraahul10@gmail.com/silver/02_transform_silver",
+								"baseParameters": {
+									"p_entity_name": {
+										"value": "@item().entity_name",
+										"type": "Expression"
+									},
+									"p_run_mode": {
+										"value": "@item().load_type",
+										"type": "Expression"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "ls_azure_databricks",
+								"type": "LinkedServiceReference"
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "nb_transform_gold",
+				"type": "DatabricksNotebook",
+				"dependsOn": [
+					{
+						"activity": "forEach_iterate_entities",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"notebookPath": "/Users/panchalraahul10@gmail.com/gold/03_transform_gold"
+				},
+				"linkedServiceName": {
+					"referenceName": "ls_azure_databricks",
+					"type": "LinkedServiceReference"
+				}
+			}
+		],
+		"parameters": {
+			"p_override_load_type": {
+				"type": "string",
+				"defaultValue": "incremental"
+			}
+		},
+		"annotations": [],
+		"lastPublishTime": "2026-10-13T14:25:23Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

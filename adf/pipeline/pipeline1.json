@@ -1,0 +1,175 @@
+{
+	"name": "pipeline1",
+	"properties": {
+		"activities": [
+			{
+				"name": "copy_json_to_bronze",
+				"type": "Copy",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "JsonSource",
+						"additionalColumns": [
+							{
+								"name": "_ingested_at",
+								"value": {
+									"value": "@utcNow()",
+									"type": "Expression"
+								}
+							},
+							{
+								"name": "_source_file",
+								"value": "$$FILEPATH"
+							}
+						],
+						"storeSettings": {
+							"type": "AzureBlobFSReadSettings",
+							"recursive": true,
+							"wildcardFolderPath": "api",
+							"wildcardFileName": "*.json",
+							"enablePartitionDiscovery": false
+						},
+						"formatSettings": {
+							"type": "JsonReadSettings"
+						}
+					},
+					"sink": {
+						"type": "ParquetSink",
+						"storeSettings": {
+							"type": "AzureBlobFSWriteSettings"
+						},
+						"formatSettings": {
+							"type": "ParquetWriteSettings"
+						}
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"mappings": [
+							{
+								"source": {
+									"path": "$['source']"
+								},
+								"sink": {
+									"name": "source"
+								}
+							},
+							{
+								"source": {
+									"path": "$['batch_id']"
+								},
+								"sink": {
+									"name": "batch_id"
+								}
+							},
+							{
+								"source": {
+									"path": "$['record_count']"
+								},
+								"sink": {
+									"name": "record_count"
+								}
+							},
+							{
+								"source": {
+									"path": "['event_id']"
+								},
+								"sink": {
+									"name": "event_id"
+								}
+							},
+							{
+								"source": {
+									"path": "['user_uid']"
+								},
+								"sink": {
+									"name": "user_uid"
+								}
+							},
+							{
+								"source": {
+									"path": "['ip_address']"
+								},
+								"sink": {
+									"name": "ip_address"
+								}
+							},
+							{
+								"source": {
+									"path": "['client_device']"
+								},
+								"sink": {
+									"name": "client_device"
+								}
+							},
+							{
+								"source": {
+									"path": "['login_success']"
+								},
+								"sink": {
+									"name": "login_success"
+								}
+							},
+							{
+								"source": {
+									"path": "['event_timestamp']"
+								},
+								"sink": {
+									"name": "event_timestamp"
+								}
+							},
+							{
+								"source": {
+									"path": "$['_ingested_at']"
+								},
+								"sink": {
+									"name": "_ingested_at"
+								}
+							},
+							{
+								"source": {
+									"path": "$['_source_file']"
+								},
+								"sink": {
+									"name": "_source_file"
+								}
+							}
+						],
+						"collectionReference": "$['data']"
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "ds_adls_generic_json",
+						"type": "DatasetReference",
+						"parameters": {
+							"p_container": "landing",
+							"p_folder_path": "api"
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "ds_adls_generic_parquet",
+						"type": "DatasetReference",
+						"parameters": {
+							"p_container": "bronze",
+							"p_folder_path": "api_logi"
+						}
+					}
+				]
+			}
+		],
+		"annotations": [],
+		"lastPublishTime": "2026-10-12T20:28:11Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}
