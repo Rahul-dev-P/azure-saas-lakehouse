@@ -13,7 +13,7 @@ models business data into an analytical **Kimball Star Schema** using
 pure path-based **Delta Lake** on Azure Data Lake Storage Gen2 (ADLS
 Gen2).
 
-The warehouse models the data into a **Galaxy Schema** optimized for SaaS executive analytics, including:
+The type of model used here is a **Galaxy Schema** optimized for SaaS executive analytics, including:
 
 - Monthly Recurring Revenue (MRR)
 - Customer churn
