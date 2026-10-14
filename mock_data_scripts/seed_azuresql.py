@@ -12,7 +12,7 @@ random.seed(42)
 SQL_SERVER = "sqlserver-saas-dev.database.windows.net"      # e.g. "sqlserver-saas-dev-XXXX.database.windows.net"
 SQL_DB = "sqldb-saas-dev"
 SQL_USER = "sqladmin"
-SQL_PASSWORD = "Rahul123"
+SQL_PASSWORD = "PASSWORD"  # Replace with your actual password or use environment variables for security
 
 # Using ODBC Driver 18 with encryption enabled for Azure SQL
 CONNECTION_URI = (
