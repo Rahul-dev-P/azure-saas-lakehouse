@@ -135,7 +135,7 @@
 							},
 							"userProperties": [],
 							"typeProperties": {
-								"notebookPath": "/Users/panchalraahul10@gmail.com/silver/02_transform_silver",
+								"notebookPath": "/Users/panchalraahul10@gmail.com/azure-saas-lakehouse/databricks/notebooks/silver/02_transform_silver",
 								"baseParameters": {
 									"p_entity_name": {
 										"value": "@item().entity_name",
@@ -175,7 +175,7 @@
 				},
 				"userProperties": [],
 				"typeProperties": {
-					"notebookPath": "/Users/panchalraahul10@gmail.com/gold/03_transform_gold"
+					"notebookPath": "/Users/panchalraahul10@gmail.com/azure-saas-lakehouse/databricks/notebooks/gold/03_transform_gold"
 				},
 				"linkedServiceName": {
 					"referenceName": "ls_azure_databricks",
