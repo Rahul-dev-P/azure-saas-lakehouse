@@ -159,9 +159,16 @@
 									"typeProperties": {
 										"storedProcedureName": "[etl_control].[sp_complete_pipeline_run]",
 										"storedProcedureParameters": {
-											"rows_written": {
+											"rows_read": {
 												"value": {
 													"value": "@activity('copy_sql_to_bronze').output.rowsRead",
+													"type": "Expression"
+												},
+												"type": "Int32"
+											},
+											"rows_written": {
+												"value": {
+													"value": "@activity('copy_sql_to_bronze').output.rowsCopied",
 													"type": "Expression"
 												},
 												"type": "Int32"
@@ -313,9 +320,16 @@
 									"typeProperties": {
 										"storedProcedureName": "[etl_control].[sp_complete_pipeline_run]",
 										"storedProcedureParameters": {
-											"rows_written": {
+											"rows_read": {
 												"value": {
 													"value": "@activity('copy_csv_to_bronze').output.rowsRead",
+													"type": "Expression"
+												},
+												"type": "Int32"
+											},
+											"rows_written": {
+												"value": {
+													"value": "@activity('copy_csv_to_bronze').output.rowsCopied",
 													"type": "Expression"
 												},
 												"type": "Int32"
@@ -459,9 +473,16 @@
 									"typeProperties": {
 										"storedProcedureName": "[etl_control].[sp_complete_pipeline_run]",
 										"storedProcedureParameters": {
+											"rows_read": {
+												"value": {
+													"value": "@activity('copy_json_to_bronze').output.rowsRead",
+													"type": "Expression"
+												},
+												"type": "Int32"
+											},
 											"rows_written": {
 												"value": {
-													"value": "@activity('copy_json_to_bronze').output.filesWritten",
+													"value": "@activity('copy_json_to_bronze').output.rowsCopied",
 													"type": "Expression"
 												},
 												"type": "Int32"

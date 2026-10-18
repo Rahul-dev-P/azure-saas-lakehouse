@@ -1,7 +1,9 @@
 .venv/
 .Ds_Store
 feature_usage_1.csv
+feature_usage_2.csv
 feature_usage.csv
 logins_batch_1.json
+logins_batch_2.json
 test.ipynb
 __pycache__/
