@@ -24,56 +24,7 @@ The type of model used here is a **Galaxy Schema** optimized for SaaS executive 
 
 ## Architecture Overview
 
-```text
-                                    DATA SOURCES
-        ┌───────────────────────┬────────────────────────┬─────────────────────┐
-        │   Azure SQL / OLTP    │      Flat-File CSV     │    REST API (JSON)  │
-        │   (Plans, Orgs, Users,│      (Product Feature  │    (Authentication  │
-        │    Subs, Invoices)    │       Usage Telemetry) │     Login Events)   │
-        └───────────┬───────────┴───────────┬────────────┴──────────┬──────────┘
-                    │                       │                       │
-                    └───────────────────────┼───────────────────────┘
-                                            ▼
-                    ┌───────────────────────────────────────────────┐
-                    │      Azure Data Factory (Orchestration)       │
-                    │  - Dynamic watermark control via Azure SQL    │
-                    │  - Metadata audit lineage logging             │
-                    └───────────────────────┬───────────────────────┘
-                                            │
-                                            ▼
-═════════════════════════════════════════════════════════════════════════════════════════
- LAYER 1: BRONZE / RAW LANDING (`abfss://bronze@...`)
- - Format: Native Parquet & Raw Multi-line JSON
- - Retention: Immutable, append-only history with ingestion year/month partitioning
-═════════════════════════════════════════════════════════════════════════════════════════
-                                            │
-                                            ▼ (Azure Databricks: `02_transform_silver.py`)
-═════════════════════════════════════════════════════════════════════════════════════════
- LAYER 2: SILVER / CONFORMED DELTA TABLES (`abfss://silver@...`)
- - Format: Open-Source Delta Lake (ACID Transaction Logs in `_delta_log/`)
- - Operations: PySpark schema normalization, JSON array unnesting, 10 DQ cleaning rules
- - Ingestion Pattern: Idempotent SCD Type 1 `MERGE INTO` updates
-═════════════════════════════════════════════════════════════════════════════════════════
-                                            │
-                                            ▼ (Azure Databricks: `03_transform_gold.py`)
-═════════════════════════════════════════════════════════════════════════════════════════
- LAYER 3: GOLD / ANALYTICS DIMENSIONAL MODEL (`abfss://gold@...`)
- - Model: Kimball Star Schema (Conformed Dimensions & Event/Snapshot Facts)
- - Keys: Warehouse-managed surrogate integer keys + `-1` Unknown Member pattern
- - Consumption: Power BI Direct Lake / Databricks SQL for Executive SaaS KPIs (MRR, DAU)
-═════════════════════════════════════════════════════════════════════════════════════════
-```
-
-### Storage Sovereignty: Pure Path-Based Delta Lake
-
-The lakehouse operates under a **pure path-based strategy**
-(`DeltaTable.forPath(spark, "abfss://...")` and
-`delta.`abfss://...\``). All commit logs (`\_delta_log/\`), Parquet
-columnar files, and time-travel versions reside directly inside
-customer-managed ADLS Gen2 containers. This design completely eliminates
-vendor lock-in, avoiding proprietary metastore boundaries while
-maintaining open cross-engine accessibility for Synapse, Fabric, and
-external Spark engines.
+![Data Architecture](saas_lakehouse_architecture.png)
 
 ---
 
@@ -90,7 +41,7 @@ external Spark engines.
 - **Security:** Azure Key Vault (Managed secret scopes, token
   authentication, connection strings)
 - **Language & Quality:** Python 3.11, PySpark, Flake8, Pytest
-- **CI/CD & DevOps:** GitHub Actions, Databricks CLI, Azure Data
+- **CI/CD:** GitHub Actions, Databricks and Azure Data
   Factory Git Integration
 
 ---
@@ -227,11 +178,11 @@ azure-saas-lakehouse/
 ├── databricks/
 │   └── notebooks/
 │       ├── common/
-│       │   └── 01_lakehouse_config.py   # ADLS Gen2 paths & Key Vault secret resolution
+│       │   └── 01_lakehouse_config.py   # Catalog setup
 │       ├── silver/
-│       │   └── 02_transform_silver.py   # Parameterized conformed cleaning engine
+│       │   └── 02_transform_silver.py
 │       └── gold/
-│           └── 03_transform_gold.py     # Kimball Star Schema dimensional loader
+│           └── 03_transform_gold.py
 ├── sql/
 │   ├── 01_azure_sql_oltp_ddl.sql      # DDL for watermark_control & pipeline_log
 │   └── 02_etl_control.sql      # SPs: sp_log_start, sp_log_complete, sp_update_watermark
@@ -304,9 +255,9 @@ delivery and validation:
 Connect to your Azure SQL Database and execute the control DDLs:
 
 ```bash
-sqlcmd -S <server>.database.windows.net -d <database> -U <user> -P <password> -i sql/01_azure_sql_oltp_ddl.sql
-sqlcmd -S <server>.database.windows.net -d <database> -U <user> -P <password> -i sql/02_init_etl_control.sql
-sqlcmd -S <server>.database.windows.net -d <database> -U <user> -P <password> -i sql/03_stored_procedures.sql
+  01_azure_sql_oltp_ddl.sql
+  02_init_etl_control.sql
+  03_stored_procedures.sql
 ```
 
 ### 3. Local Test Suite Execution
@@ -315,7 +266,7 @@ Verify data quality functions and regex rules locally:
 
 ```bash
 python -m venv venv
-source venv/bin/activate       # On Windows: .\venv\Scripts\Activate.ps1
+source venv/bin/activate
 pip install -r requirements-dev.txt
 
 flake8 tests/
