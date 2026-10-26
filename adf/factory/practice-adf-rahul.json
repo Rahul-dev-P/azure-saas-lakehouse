@@ -1,0 +1,15 @@
+{
+	"name": "practice-adf-rahul",
+	"properties": {
+		"trustModeClaimForMi": {
+			"value": "Disabled",
+			"editable": true
+		}
+	},
+	"location": "centralindia",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "db57c947-32cd-47f9-a448-ec241f7e373e",
+		"tenantId": "d1fb9a15-b751-4a36-b99f-bdb59191bae9"
+	}
+}
