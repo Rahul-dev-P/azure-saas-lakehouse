@@ -23,7 +23,8 @@ GO
 CREATE OR ALTER PROCEDURE etl_control.sp_complete_pipeline_run
     @source_id INT,
     @run_id VARCHAR(100),
-    @rows_written INT = 0
+    @rows_written INT = 0,
+    @rows_read INT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -38,6 +39,7 @@ BEGIN
     UPDATE etl_control.pipeline_log
     SET end_time = SYSUTCDATETIME(),
         rows_written = @rows_written,
+        rows_read = @rows_read,
         status = 'SUCCESS'
     WHERE run_id = @run_id AND source_id = @source_id AND layer = 'Bronze';
 END;

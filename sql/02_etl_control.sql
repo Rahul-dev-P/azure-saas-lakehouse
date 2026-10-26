@@ -44,15 +44,15 @@ GO
 -- 5. Execution Audit Logging Table
 CREATE TABLE etl_control.pipeline_log (
     log_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    run_id VARCHAR(100) NOT NULL,                -- ADF pipeline Run ID
+    run_id VARCHAR(100) NOT NULL,                
     source_id INT NOT NULL,
     entity_name VARCHAR(100) NOT NULL,
-    layer VARCHAR(20) NOT NULL,                  -- 'Bronze', 'Silver', 'Gold'
+    layer VARCHAR(20) NOT NULL,                  
     start_time DATETIME2 NOT NULL,
     end_time DATETIME2 NULL,
     rows_read INT NULL,
     rows_written INT NULL,
-    status VARCHAR(50) NOT NULL,                 -- 'RUNNING', 'SUCCESS', 'FAILED'
+    status VARCHAR(50) NOT NULL,               
     error_message NVARCHAR(MAX) NULL
 );
 GO
@@ -61,16 +61,13 @@ GO
 INSERT INTO etl_control.pipeline_config 
 (source_system, entity_name, source_type, source_schema_or_path, source_object_name, watermark_column, target_container, target_subpath, silver_table_name, gold_table_name, load_type, execution_order, is_active)
 VALUES
--- Dimensions / Lookups (Execution Order = 1)
 ('azure_sql', 'plans',         'table', 'dbo', 'plans',         'updated_at', 'bronze', 'sql_plans',         'cln_plans',         'dim_plan',         'incremental', 1, 1),
 ('azure_sql', 'organizations', 'table', 'dbo', 'organizations', 'updated_at', 'bronze', 'sql_organizations', 'cln_organizations', 'dim_organization', 'incremental', 1, 1),
 ('azure_sql', 'users',         'table', 'dbo', 'users',         'updated_at', 'bronze', 'sql_users',         'cln_users',         'dim_user',         'incremental', 1, 1),
-
--- Facts / Event Streams (Execution Order = 2)
 ('azure_sql', 'subscriptions', 'table', 'dbo', 'subscriptions', 'updated_at', 'bronze', 'sql_subscriptions', 'cln_subscriptions', 'fact_subscriptions', 'incremental', 2, 1),
 ('azure_sql', 'invoices',      'table', 'dbo', 'invoices',      'updated_at', 'bronze', 'sql_invoices',      'cln_invoices',      'fact_billing',      'incremental', 2, 1),
-('adls_csv',  'feature_usage', 'file',  'landing/csv/feature_usage', 'feature_usage.csv', NULL, 'bronze', 'file_feature_usage', 'cln_feature_usage', 'fact_feature_usage', 'full', 2, 1),
-('adls_api',  'logins',        'json',  'landing/api/logins',        'logins_batch_1.json', NULL, 'bronze', 'api_logins',       'cln_logins',        'fact_logins',        'full', 2, 1);
+('adls_csv',  'feature_usage', 'file',  'csv', '*.csv', 'LastModifiedDate', 'bronze', 'file_feature_usage', 'cln_feature_usage', 'fact_feature_usage', 'incremental', 2, 1),
+('adls_api',  'logins',        'json',  'api', '*.json', 'LastModifiedDate', 'bronze', 'api_logins',       'cln_logins',        'fact_logins',        'incremental', 2, 1);
 GO
 
 -- 7. Initialize Watermark Tracking (Default baseline to historical epoch: 1970-01-01)
